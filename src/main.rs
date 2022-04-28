@@ -24,6 +24,7 @@ lazy_static! {
     static ref HELPERS_RE: Regex = Regex::new(r"\{\{-?\s*define\s+([^\}]+)\s*-?\}\}").unwrap();
     static ref STATEMENT_RE: Regex = Regex::new(r"\{\{-?\s*([^\}]+)\s*-?\}\}").unwrap();
     static ref RANGE_RE: Regex = Regex::new(r"range\s+(\$[\w]+),\s*(\$[\w]+)\s*:=").unwrap();
+    static ref VAR_DECLARE_RE: Regex = Regex::new(r"(\$[\w\d_]+)\s*:=").unwrap();
 }
 
 #[derive(Debug, Default)]
@@ -255,7 +256,7 @@ impl LanguageServer for Backend {
                     .chars()
                     .enumerate()
                     .skip(position.character as usize)
-                    .filter(|(_idx, c)| *c == ' ')
+                    .filter(|(_idx, c)| *c == ' ' || *c == '.')
                     .next()
                     .unwrap();
                 let key = &line[start + 1..end];
@@ -359,7 +360,28 @@ impl LanguageServer for Backend {
                             }
                         }
                     }
-                    _ => {}
+                    _ => {
+                        if let Some(cap) = VAR_DECLARE_RE.captures(stat) {
+                            for mat in cap.iter().skip(1) {
+                                let mat = mat.unwrap();
+                                eprintln!("declare var: {}", mat.as_str());
+
+                                ctx.declare_var(
+                                    mat.as_str().into(),
+                                    Var {
+                                        value: Value::Null,
+                                        location: Location {
+                                            line: lineno,
+                                            range: (
+                                                location.range.0 + mat.start() as u32,
+                                                location.range.0 + mat.end() as u32,
+                                            ),
+                                        },
+                                    },
+                                );
+                            }
+                        }
+                    }
                 }
             }
 
